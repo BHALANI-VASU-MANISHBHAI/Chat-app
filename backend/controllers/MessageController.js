@@ -1,4 +1,5 @@
 import messageModel from "../models/messageModel.js";
+import { redisClient } from "../config/redisClient.js";
 
 const getMessages = async (req, res) => {
   const { friendId } = req.params;
@@ -49,7 +50,7 @@ const sendMessage = async (req, res) => {
     });
     console.log("New message created:", newMessage);
     console.log("receiverId:", receiverId, "senderId:", senderId);
-    io.to(receiverId).emit("newMessage", {
+    io.to(receiverId.toString()).emit("newMessage", {
       sender: senderId,
       receiver: receiverId,
       content,
@@ -65,18 +66,30 @@ const sendMessage = async (req, res) => {
 };
 const markMessagesAsRead = async (req, res) => {
   try {
+    const io = req.app.get("io");
     const { friendId } = req.body;
     const userId = req.user._id;
 
+    // Mark messages as read
     await messageModel.updateMany(
       { sender: friendId, receiver: userId, isRead: false },
       { $set: { isRead: true } }
     );
 
-    res.json({ success: true });
+    // Get friend's socket ID from Redis
+    const friendSocketId = await redisClient.get(`user:${friendId}`);
+    console.log(`Friend's socket ID for ${friendId}: ${friendSocketId}`);
+    if (friendSocketId) {
+      // Send real-time event to friend
+      io.to(friendId).emit("messagesRead", { friendId, userId });
+    } else {
+      console.log(`Friend ${friendId} is offline, skipping emit.`);
+    }
+
+    return res.json({ success: true });
   } catch (err) {
     console.error("Error marking messages as read:", err);
-    res
+    return res
       .status(500)
       .json({ success: false, message: "Failed to mark messages as read" });
   }
@@ -85,6 +98,7 @@ const markMessagesAsRead = async (req, res) => {
 const deleteMessage = async (req, res) => {
   try {
     const { messageId } = req.body;
+    const io = req.app.get("io");
     const deletedMessage = await messageModel.findByIdAndDelete(messageId);
     if (!deletedMessage) {
       return res.status(404).json({
@@ -92,7 +106,14 @@ const deleteMessage = async (req, res) => {
         message: "Message not found",
       });
     }
-    res.status(200).json({
+
+    io.to(deletedMessage.receiver.toString()).emit("messageDeleted", {
+      messageId,
+      sender: deletedMessage.sender,
+      receiver: deletedMessage.receiver,
+    });
+
+    return res.status(200).json({
       success: true,
       message: "Message deleted successfully",
     });

@@ -10,10 +10,22 @@ export const useSendMessage = () => {
 
   return useMutation({
     mutationFn: async ({ receiverId, content, image }) => {
+      if (!token) {
+        throw new Error(
+          "Authentication token is missing. Please log in again."
+        );
+      }
+
+    
       const { data } = await axios.post(
         `${backendUrl}/api/messages/sendmessage`,
         { receiverId, content, image },
-        { headers: { token } }
+        {
+          headers: {
+            token: token,
+            "Content-Type": "application/json",
+          },
+        }
       );
       return data;
     },

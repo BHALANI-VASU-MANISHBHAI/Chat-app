@@ -14,5 +14,8 @@
     "concurrently": "^7.6.0"
   },
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "redis": "^5.8.1"
+  }
 }

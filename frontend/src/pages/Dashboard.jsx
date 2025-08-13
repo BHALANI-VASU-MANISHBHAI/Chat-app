@@ -5,35 +5,60 @@ import { useSendMessage } from "../hooks/useSendMessage.js"; // mutation hook fo
 import { useMarkAsRead } from "../hooks/useMarkAsRead.js"; // mutation hook for marking messages as read
 import { useDeleteMessage } from "../hooks/useDeleteMessage.js"; // mutation hook for deleting messages
 import { useEditMessage } from "../hooks/useEditMessage.js"; // mutation hook for editing messages
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import socket from "../services/socket.js";
 import { toast } from "react-toastify";
 import assets from "../assets/assets.js";
+import AddFriendModal from "../components/AddFriendModal.jsx";
+import ForwardModal from "../components/ForwardModal.jsx";
+import { MessageContext } from "../contexts/messageContext.jsx";
+import { useDeleteFriendMutation } from "../hooks/useDeleteFriend.js";
+import { GlobalContext } from "../contexts/GlobalContext.jsx";
 
 const Dashboard = () => {
-  const { friendData, userData } = useContext(UserContext);
+  const { friendData, userData, token } = useContext(UserContext);
+  const { backendUrl } = useContext(GlobalContext);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [message, setMessage] = useState("");
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
+  const [isFriendMenuOpen, setIsFriendMenuOpen] = useState(false);
+  // Forwarding states
+  const [isForwardingMode, setIsForwardingMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState([]);
+  const [showForwardModal, setShowForwardModal] = useState(false);
   const {
     data: messages = [],
     isLoading,
     error,
   } = useMessages(selectedFriend?._id);
+
+  const { ForwardingMessage, setForwardingMessage } =
+    useContext(MessageContext);
   const [messageidDropdown, setMessageidDropdown] = useState(null);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [messageid, setMessageid] = useState(null);
+  const [isAddOptionOpen, setIsAddOptionOpen] = useState(false);
+
   const sendMessageMutation = useSendMessage();
   const markAsReadMutation = useMarkAsRead();
   const deleteMessageMutation = useDeleteMessage();
   const editMessageMutation = useEditMessage();
-  const options = ["delete", "edit", "forward", "reply"];
+  const deleteFriendMutation = useDeleteFriendMutation();
+  const options = ["delete", "edit", "forward", "reply", "copy"];
+
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredFriends = friendData.filter((friend) =>
-    friend.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // const filteredFriends = friendData.filter((friend) =>
+  //   friend.name.toLowerCase().includes(searchTerm.toLowerCase())
+  // );
 
   const handleSendMessage = () => {
     if (message.trim() && selectedFriend) {
       const trimmedMessage = message.trim();
-      console.log("Sending message:", selectedFriend._id, trimmedMessage);
+
       sendMessageMutation.mutate(
         {
           receiverId: selectedFriend._id,
@@ -47,11 +72,41 @@ const Dashboard = () => {
       );
     }
   };
-
+  const toggleFriendMenu = () => {
+    setIsFriendMenuOpen((prev) => !prev);
+  };
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {
       handleSendMessage();
     }
+  };
+
+  // Forwarding functions
+  const toggleForwardingMode = () => {
+    setIsForwardingMode(!isForwardingMode);
+    setSelectedMessages([]);
+  };
+
+  const toggleMessageSelection = (messageId) => {
+    setSelectedMessages((prev) =>
+      prev.includes(messageId)
+        ? prev.filter((id) => id !== messageId)
+        : [...prev, messageId]
+    );
+  };
+
+  const handleForwardMessages = () => {
+    if (selectedMessages.length > 0) {
+      setShowForwardModal(true);
+    } else {
+      toast.error("Please select messages to forward");
+    }
+  };
+
+  const cancelForwarding = () => {
+    setIsForwardingMode(false);
+    setSelectedMessages([]);
+    setShowForwardModal(false);
   };
 
   const handleDeleteMessage = (messageId) => {
@@ -81,6 +136,31 @@ const Dashboard = () => {
     );
   };
 
+  //copy the message to clipboard
+  const handleCopyMessage = (messageContent) => {
+    navigator.clipboard.writeText(messageContent).then(
+      () => {
+        toast.success("Message copied to clipboard");
+      },
+      () => {
+        toast.error("Failed to copy message");
+      }
+    );
+  };
+
+  const handleDeleteFriend = (friendId) => {
+    deleteFriendMutation.mutate(friendId, {
+      onSuccess: () => {
+        setSelectedFriend(null);
+        navigate("/dashboard");
+      },
+      onError: (error) => {
+        console.error("Delete friend error:", error);
+        toast.error("Failed to delete friend");
+      },
+    });
+  };
+
   useEffect(() => {
     if (selectedFriend) {
       markAsReadMutation.mutate(selectedFriend._id);
@@ -88,20 +168,32 @@ const Dashboard = () => {
   }, [selectedFriend]);
 
   useEffect(() => {
-    socket.on("newMessage", (newMessage) => {
-      console.log("New message received:", newMessage);
-
-      console.log("Message belongs to current user, updating messages");
-      // Update messages state to include the new message
-
-      // now only push if the message is from the selected friend or the current user
+    // New message event
+    socket.on("newMessage", (message) => {
+      console.log("New message received:", message);
+      // Invalidate queries to refresh messages
+      queryClient.invalidateQueries(["messages", selectedFriend?._id]);
+      queryClient.invalidateQueries(["messages", message.sender]);
       toast.success("New message received");
-      messages.push(newMessage);
     });
+
+    // Messages read event
+    socket.on("messagesRead", ({ friendId, userId }) => {
+      console.log(`Messages from ${friendId} read by ${userId}`);
+      // Invalidate queries to update read status
+      queryClient.invalidateQueries(["messages", friendId]);
+    });
+    socket.on("messageDeleted", (data) => {
+      console.log("Message deleted:", data);
+      queryClient.invalidateQueries(["messages", selectedFriend?._id]);
+      queryClient.invalidateQueries(["messages", data.sender]);
+    });
+
     return () => {
       socket.off("newMessage");
+      socket.off("messagesRead");
     };
-  }, [messages, selectedFriend]);
+  }, []); // Only depend on the ID, not the whole object
 
   const SingleTick = () => (
     <svg
@@ -135,6 +227,30 @@ const Dashboard = () => {
     </svg>
   );
 
+  useEffect(() => {
+    console.log("Friend data before update:", friendData);
+  }, [friendData]);
+
+  const ForwardingMessageDesign = () => {
+    return (
+      <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded-lg shadow-sm">
+        <img
+          src={ForwardingMessage.profilePicture || "default-avatar.png"}
+          alt={ForwardingMessage.name}
+          className="w-10 h-10 rounded-full object-cover"
+        />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-gray-900">
+            Forwarding: {ForwardingMessage.name}
+          </p>
+          <p className="text-xs text-gray-500">
+            {ForwardingMessage.content || ForwardingMessage.text}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar - Friends List */}
@@ -143,9 +259,44 @@ const Dashboard = () => {
           <h2 className="text-xl font-semibold text-gray-800">Chats</h2>
           <img
             src={assets.add_icon}
-            alt="Add Icon"
+            alt="Add Friend"
             className="w-6 h-6 inline-block ml-2 cursor-pointer hover:opacity-70 transition-opacity"
+            onClick={() => setShowAddFriendModal(true)}
+            title="Add new friend"
           />
+          <div className="relative">
+            {/* Button to toggle menu */}
+            <button
+              onClick={() => setIsAddOptionOpen((prev) => !prev)}
+              className="p-2 rounded-full hover:bg-gray-100"
+            >
+              ⋮ {/* 3 dots */}
+            </button>
+
+            {/* Dropdown menu */}
+            {isAddOptionOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50">
+                <button
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                  onClick={() => {
+                    setShowAddFriendModal(true);
+                    setIsAddOptionOpen(false);
+                  }}
+                >
+                  Add Friend
+                </button>
+                <button
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                  onClick={() => {
+                    navigate("/create-group");
+                    setIsAddOptionOpen(false);
+                  }}
+                >
+                  Create Group
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="p-3">
           <input
@@ -157,33 +308,73 @@ const Dashboard = () => {
           />
         </div>
         <div className="flex-1 overflow-y-auto">
-          {filteredFriends.length === 0 ? (
+          {friendData.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               No friends found
             </div>
           ) : (
-            filteredFriends.map((friend) => (
+            friendData.map((friend) => (
               <div
                 key={friend._id}
-                className={`flex items-center px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                className={`flex items-center px-4 py-3 cursor-pointer transition-all duration-200 border-l-4 ${
                   selectedFriend?._id === friend._id
-                    ? "bg-gray-100 border-r-4 border-green-500"
-                    : ""
+                    ? "bg-green-50 border-l-green-500 shadow-sm scale-[1.02] animate-pulse-subtle"
+                    : "border-l-transparent hover:bg-gray-50 hover:border-l-gray-300 hover:scale-[1.01]"
                 }`}
                 onClick={() => setSelectedFriend(friend)}
               >
-                <img
-                  src={friend.profilePicture || "default-avatar.png"}
-                  alt={friend.name}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
+                <div className="relative">
+                  <img
+                    src={friend.profilePicture || "default-avatar.png"}
+                    alt={friend.name}
+                    className={`w-12 h-12 rounded-full object-cover transition-all duration-200 ${
+                      selectedFriend?._id === friend._id
+                        ? "ring-2 ring-green-400 ring-offset-2"
+                        : ""
+                    }`}
+                  />
+                  {/* Online status indicator */}
+                  <div
+                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
+                      selectedFriend?._id === friend._id
+                        ? "bg-green-400"
+                        : "bg-green-400"
+                    }`}
+                  ></div>
+                </div>
                 <div className="ml-3 flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-900 truncate">
+                  <h3
+                    className={`text-sm font-medium truncate ${
+                      selectedFriend?._id === friend._id
+                        ? "text-green-700 font-semibold"
+                        : "text-gray-900"
+                    }`}
+                  >
                     {friend.name}
                   </h3>
-                  <p className="text-xs text-gray-500 truncate mt-1">
+                  <p
+                    className={`text-xs truncate mt-1 ${
+                      selectedFriend?._id === friend._id
+                        ? "text-green-600"
+                        : "text-gray-500"
+                    }`}
+                  >
                     Hey! How are you?
                   </p>
+                </div>
+
+                {/* Unread message badge - placeholder */}
+                <div className="flex flex-col items-end ml-2">
+                  <span className="text-xs text-gray-400">2:30 PM</span>
+                  <div
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
+                      selectedFriend?._id === friend._id
+                        ? "bg-green-600 text-white"
+                        : "bg-green-500 text-white"
+                    }`}
+                  >
+                    2
+                  </div>
                 </div>
               </div>
             ))
@@ -196,27 +387,129 @@ const Dashboard = () => {
         {selectedFriend ? (
           <>
             {/* Chat Header */}
-            <div className="bg-white px-6 py-4 border-b border-gray-200 flex items-center">
-              <img
-                src={
-                  selectedFriend.profilePicture ||
-                  "https://static.vecteezy.com/system/resources/previews/005/544/718/non_2x/profile-icon-design-free-vector.jpg"
-                }
-                alt={selectedFriend.name}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-              <div className="ml-3">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {selectedFriend.name}
-                </h3>
-                <p className="text-sm text-green-500">
-                  {selectedFriend.isOnline
-                    ? "Online"
-                    : `Last seen: ${new Date(
-                        selectedFriend.lastSeen
-                      ).toLocaleTimeString()}`}
-                </p>
-              </div>
+            <div
+              className={`px-6 py-4 border-b border-gray-200 flex items-center transition-colors duration-200 ${
+                isForwardingMode ? "bg-green-50" : "bg-white"
+              }`}
+            >
+              {isForwardingMode ? (
+                /* Forwarding Header */
+                <>
+                  <button
+                    onClick={cancelForwarding}
+                    className="mr-4 text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {selectedMessages.length} message
+                      {selectedMessages.length !== 1 ? "s" : ""} selected
+                    </h3>
+                    <p className="text-sm text-green-600">
+                      Select messages to forward
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleForwardMessages}
+                    disabled={selectedMessages.length === 0}
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2 inline"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                      />
+                    </svg>
+                    Forward
+                  </button>
+                </>
+              ) : (
+                /* Normal Header */
+                <>
+                  <img
+                    src={
+                      selectedFriend.profilePicture ||
+                      "https://static.vecteezy.com/system/resources/previews/005/544/718/non_2x/profile-icon-design-free-vector.jpg"
+                    }
+                    alt={selectedFriend.name}
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                  <div className="ml-3">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {selectedFriend.name}
+                    </h3>
+                    <p className="text-sm text-green-500">
+                      {selectedFriend.isOnline
+                        ? "Online"
+                        : `Last seen: ${new Date(
+                            selectedFriend.lastSeen
+                          ).toLocaleTimeString()}`}
+                    </p>
+                  </div>
+                  <div className="ml-auto flex items-center space-x-3">
+                    <button
+                      onClick={toggleForwardingMode}
+                      className="text-gray-600 hover:text-gray-800 transition-colors"
+                      title="Forward messages"
+                    >
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                        />
+                      </svg>
+                    </button>
+                    <div className="relative">
+                      <img
+                        src={assets.threedot_icon}
+                        alt="More Options"
+                        className="w-6 h-6 cursor-pointer hover:opacity-70 transition-opacity"
+                        onClick={toggleFriendMenu}
+                        title="More Options"
+                      />
+                      {isFriendMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg z-50">
+                          <button
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                            onClick={() => {
+                              handleDeleteFriend(selectedFriend._id);
+                            }}
+                          >
+                            delete Friend
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Messages Area */}
@@ -225,21 +518,55 @@ const Dashboard = () => {
               {error && <p>Error loading messages</p>}
               {!isLoading &&
                 messages.map((msg) => (
-                  // console.log("Message:", msg),
                   <div
                     key={msg._id || msg.id}
-                    className={`flex group ${
+                    className={`flex group items-start ${
                       msg.sender === userData._id
-                        ? "justify-end"
+                        ? "justify-end "
                         : "justify-start"
+                    } ${
+                      isForwardingMode &&
+                      selectedMessages.includes(msg._id || msg.id)
+                        ? "bg-green-100 rounded-lg p-2 -mx-2"
+                        : ""
                     }`}
                   >
+                    {/* Checkbox for forwarding mode */}
+                    {isForwardingMode && (
+                      <div
+                        className={`flex-shrink-0 ${
+                          msg.sender === userData._id ? "ml-3" : "mr-3"
+                        } mt-2`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMessages.includes(msg._id || msg.id)}
+                          onChange={() =>
+                            toggleMessageSelection(msg._id || msg.id)
+                          }
+                          className="w-5 h-5 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2 cursor-pointer"
+                        />
+                      </div>
+                    )}
+
                     <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative ${
+                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg relative transition-all duration-200 ${
                         msg.sender === userData._id
-                          ? "bg-blue-500 text-white rounded-br-none"
+                          ? "bg-green-500 text-white rounded-br-none"
                           : "bg-white text-gray-900 rounded-bl-none shadow-sm"
+                      } ${
+                        isForwardingMode &&
+                        selectedMessages.includes(msg._id || msg.id)
+                          ? "ring-2 ring-green-400"
+                          : ""
                       }`}
+                      onClick={() =>
+                        isForwardingMode &&
+                        toggleMessageSelection(msg._id || msg.id)
+                      }
+                      style={{
+                        cursor: isForwardingMode ? "pointer" : "default",
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <p className="text-sm flex items-center space-x-1">
@@ -286,7 +613,17 @@ const Dashboard = () => {
                                     if (newContent) {
                                       handleEditMessage(msg._id, newContent);
                                     }
+                                  } else if (option === "copy") {
+                                    handleCopyMessage(msg.content || msg.text);
+                                  } else if (option === "forward") {
+                                    // Handle forward logic here
+                                    console.log("Forwarding message:", msg);
+                                    // You can implement a modal or another UI to select recipient
+                                    setForwardingMessage(msg);
                                   }
+                                  setMessageidDropdown(null);
+                                  setMessageid(msg._id);
+                                  setSelectedOption(option);
                                 }}
                                 disabled={deleteMessageMutation.isLoading}
                                 title={
@@ -328,7 +665,7 @@ const Dashboard = () => {
                 />
                 <button
                   onClick={handleSendMessage}
-                  disabled={!message.trim() || sendMessageMutation.isLoading}
+                  disabled={sendMessageMutation.isLoading}
                   className="bg-green-500 text-white p-2 rounded-full hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                   Send
@@ -350,6 +687,23 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Add Friend Modal */}
+      <AddFriendModal
+        isOpen={showAddFriendModal}
+        onClose={() => setShowAddFriendModal(false)}
+      />
+
+      {/* Forward Modal */}
+      <ForwardModal
+        isOpen={showForwardModal}
+        onClose={() => {
+          setShowForwardModal(false);
+          cancelForwarding();
+        }}
+        selectedMessages={selectedMessages}
+        messages={messages}
+      />
     </div>
   );
 };

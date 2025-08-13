@@ -6,9 +6,11 @@ import dotenv from "dotenv";
 import connectDB from "./config/connectDb.js";
 import userRouter from "./routes/userRoute.js";
 import messageRouter from "./routes/messageRoute.js";
+import { redisClient } from "./config/redisClient.js";
 
 dotenv.config();
 connectDB();
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -31,11 +33,14 @@ app.get("/", (req, res) => {
 
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
+
   // Handle user joining a room
   socket.on("joinRoom", (userId) => {
     console.log(`User ${userId} joined room`);
+
     socket.join(userId);
   });
+
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
   });

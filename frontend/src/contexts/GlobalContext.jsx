@@ -16,9 +16,15 @@ const GlobalContextProvider = ({ children }) => {
     backendUrl,
     token,
     setToken,
-    navigate
+    navigate,
   };
 
+  useEffect(() => {
+    if (token) {
+      console.log("Token set in GlobalContext:", token);
+      setToken(localStorage.getItem("token"));
+    }
+  }, [token]);
   return (
     <GlobalContext.Provider value={value}>{children}</GlobalContext.Provider>
   );

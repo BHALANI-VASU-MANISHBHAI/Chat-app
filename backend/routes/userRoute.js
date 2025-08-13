@@ -6,6 +6,7 @@ import {
   AddFriend,
   getUserData,
   changeOnlineStatus,
+  deleteFriend,
 } from "../controllers/UserController.js";
 import { userAuth } from "../middleware/userAuth.js";
 
@@ -17,4 +18,6 @@ userRouter.get("/getFriends", userAuth, getFriends);
 userRouter.get("/getUserData", userAuth, getUserData);
 userRouter.post("/addFriend", userAuth, AddFriend);
 userRouter.post("/changeOnlineStatus", userAuth, changeOnlineStatus);
+userRouter.delete("/deleteFriend", userAuth, deleteFriend);
+
 export default userRouter;

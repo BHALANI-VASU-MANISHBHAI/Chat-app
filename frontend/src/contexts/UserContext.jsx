@@ -9,7 +9,13 @@ export const UserContext = createContext();
 
 const UserContextProvider = ({ children }) => {
   const [userData, setUserData] = useState(null);
-  const [friendData, setFriendData] = useState([]);
+
+  // ✅ Call hook first
+  const { data: friendsFromQuery = [], error, isLoading } = useFriends();
+
+  // ✅ Now use it in state
+  const [friendData, setFriendData] = useState(friendsFromQuery);
+
   const { backendUrl, token } = useContext(GlobalContext);
 
   // Fetch user data
@@ -18,7 +24,6 @@ const UserContextProvider = ({ children }) => {
       const response = await axios(`${backendUrl}/api/user/getUserData`, {
         headers: { token },
       });
-      console.log("User data response:", response.data);
       if (response.data.success) {
         setUserData(response.data.user);
       } else {
@@ -29,52 +34,30 @@ const UserContextProvider = ({ children }) => {
     }
   };
 
-  // Use React Query hook at the top level:
-  const { data: friendsFromQuery, error, isLoading } = useFriends();
-
-  // Sync friends data from React Query to local state
+  // Keep friendData in sync with query
   useEffect(() => {
-    if (friendsFromQuery) {
-      console.log("Friends data from query:", friendsFromQuery);
-      setFriendData(friendsFromQuery);
-      console.log("Friends data fetched successfully:", friendsFromQuery);
-    }
+    setFriendData(friendsFromQuery || []);
   }, [friendsFromQuery]);
 
+  // Get user data on token change
   useEffect(() => {
-    if (token) {
-      getUserData();
-    }
+    if (token) getUserData();
   }, [token, backendUrl]);
 
+  // Join socket room when user loaded
   useEffect(() => {
     if (userData) {
-      console.log("User data updated:", userData);
       socket.emit("joinRoom", userData._id);
     }
   }, [userData]);
+
+  // Show error if friends query fails
   useEffect(() => {
     if (error) {
       toast.error("Failed to fetch friends data");
       console.error(error);
     }
   }, [error]);
-
-  useEffect(() => {
-    socket.on("statusChanged", (data) => {
-      console.log("Status changed event received:", data);
-      setFriendData((prevFriends) =>
-        prevFriends.map((friend) =>
-          friend._id === data.user._id
-            ? { ...friend, status: data.user.status }
-            : friend
-        )
-      );
-    });
-    return () => {
-      socket.off("statusChanged");
-    };
-  }, []);
 
   const value = {
     userData,

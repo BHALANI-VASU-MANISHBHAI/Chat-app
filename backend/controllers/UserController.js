@@ -139,6 +139,14 @@ const AddFriend = async (req, res) => {
       });
     }
 
+    // Prevent users from adding themselves
+    if (friend._id.toString() === userId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot add yourself as a friend",
+      });
+    }
+
     if (user.friends.includes(friend._id)) {
       return res.status(400).json({
         success: false,
@@ -148,6 +156,13 @@ const AddFriend = async (req, res) => {
 
     user.friends.push(friend._id);
     await user.save();
+
+    // Add user to friend's friends list
+    // This ensures that the friend also has the user in their friends list
+    if (!friend.friends.includes(user._id)) {
+      friend.friends.push(user._id);
+      await friend.save();
+    }
 
     res.status(200).json({
       success: true,
@@ -232,6 +247,52 @@ const changeOnlineStatus = async (req, res) => {
   }
 };
 
+// delete friend
+const deleteFriend = async (req, res) => {
+  const userId = req.user._id; // Get user ID from authenticated request
+
+  try {
+    console.log("Delete friend request received for user:", userId);
+    console.log("req.body:", req.body);
+    const { friendId } = req.body;
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.friends.includes(friendId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Friend not found in your friend list",
+      });
+    }
+
+    user.friends = user.friends.filter((id) => id.toString() !== friendId);
+    await user.save();
+
+    // Remove user from friend's friends list
+    const friend = await userModel.findById(friendId);
+    if (friend) {
+      friend.friends = friend.friends.filter((id) => id.toString() !== userId);
+      await friend.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Friend removed successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting friend:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 export {
   SignUp,
   Login,
@@ -239,4 +300,5 @@ export {
   AddFriend,
   getUserData,
   changeOnlineStatus,
+  deleteFriend,
 };
