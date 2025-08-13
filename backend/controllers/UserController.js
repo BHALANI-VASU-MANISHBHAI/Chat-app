@@ -1,9 +1,9 @@
 import userModel from "../models/userModel.js";
 import jwt from "jsonwebtoken";
-
+import { v2 as cloudinary } from "cloudinary";
 // sign up
 const SignUp = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, status } = req.body;
   console.log("SignUp request received:", req.body);
   try {
     const existingUser = await userModel.findOne({ email });
@@ -14,7 +14,13 @@ const SignUp = async (req, res) => {
         message: "User already exists",
       });
     }
-    const newUser = new userModel({ name, email, password, isOnline: true });
+    const newUser = new userModel({
+      name,
+      email,
+      password,
+      status: status || "Hey there! I am using ChatApp",
+      isOnline: true,
+    });
 
     await newUser.save();
 
@@ -249,18 +255,18 @@ const changeOnlineStatus = async (req, res) => {
 
 // delete friend
 const deleteFriend = async (req, res) => {
-  const userId = req.user._id; // Get user ID from authenticated request
-
+  const userId = req.user._id;
+  const io = req.app.get("io");
   try {
     console.log("Delete friend request received for user:", userId);
     console.log("req.body:", req.body);
     const { friendId } = req.body;
+
     const user = await userModel.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (!user.friends.includes(friendId)) {
@@ -272,17 +278,14 @@ const deleteFriend = async (req, res) => {
 
     user.friends = user.friends.filter((id) => id.toString() !== friendId);
     await user.save();
-
-    // Remove user from friend's friends list
-    const friend = await userModel.findById(friendId);
-    if (friend) {
-      friend.friends = friend.friends.filter((id) => id.toString() !== userId);
-      await friend.save();
-    }
-
+    console.log("Friend removed from user's friend list:", friendId);
+    console.log("Emitting friendDeleted event to user:", userId);
+    io.to(userId.toString()).emit("friendDeleted", {
+      friendId,
+    }); // Notify the user that a friend has been deleted
     res.status(200).json({
       success: true,
-      message: "Friend removed successfully",
+      message: "Friend removed from your list",
     });
   } catch (error) {
     console.error("Error deleting friend:", error);
@@ -293,6 +296,61 @@ const deleteFriend = async (req, res) => {
   }
 };
 
+const UpdateProfile = async (req, res) => {
+  try {
+    const userId = req.user._id; // Get user ID from authenticated request
+    const { name, email, status } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and email are required",
+      });
+    }
+
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.name = name;
+    user.email = email;
+    user.status = status || user.status; // Update status if provided
+
+    // Handle avatar upload if file is provided
+    if (req.file) {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: "image",
+        folder: "profilePhotos",
+      });
+      user.avatar = result.secure_url; // Save the avatar URL
+      console.log("Avatar uploaded to Cloudinary:", result.secure_url);
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        status: user.status,
+        avatar: user.avatar,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
 export {
   SignUp,
   Login,
@@ -301,4 +359,5 @@ export {
   getUserData,
   changeOnlineStatus,
   deleteFriend,
+  UpdateProfile,
 };

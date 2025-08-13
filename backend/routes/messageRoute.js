@@ -3,7 +3,7 @@ import {
   getMessages,
   markMessagesAsRead,
   deleteMessage,
-  editMessage,
+  editMessage
 } from "../controllers/MessageController.js";
 import express from "express";
 import { userAuth } from "../middleware/userAuth.js";
@@ -16,5 +16,6 @@ messageRouter.post("/sendmessage", userAuth, sendMessage);
 messageRouter.delete("/deletemessage", userAuth, deleteMessage);
 messageRouter.put("/editmessage", userAuth, editMessage);
 messageRouter.put("/markasread", userAuth, markMessagesAsRead);
+
 
 export default messageRouter;

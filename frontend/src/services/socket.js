@@ -6,13 +6,12 @@ const socket = io(backendUrl, {
   transports: ["websocket"],
 });
 
-socket.on("connect", async () => {
-  
+socket.on("connect",  () => {
   console.log("Socket connected:", socket.id);
-  // we do add the cline id
+
 });
 
-socket.on("disconnect", async () => {
+socket.on("disconnect",  () => {
   console.log("Socket disconnected:", socket.id);
 
 });

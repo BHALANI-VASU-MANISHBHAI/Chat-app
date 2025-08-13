@@ -7,10 +7,10 @@ import connectDB from "./config/connectDb.js";
 import userRouter from "./routes/userRoute.js";
 import messageRouter from "./routes/messageRoute.js";
 import { redisClient } from "./config/redisClient.js";
-
+import connectCloudinary from "./config/cloudinary.js";
 dotenv.config();
 connectDB();
-
+connectCloudinary();
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -36,9 +36,8 @@ io.on("connection", (socket) => {
 
   // Handle user joining a room
   socket.on("joinRoom", (userId) => {
-    console.log(`User ${userId} joined room`);
-
     socket.join(userId);
+    console.log(`User ${userId} joined room`);
   });
 
   socket.on("disconnect", () => {

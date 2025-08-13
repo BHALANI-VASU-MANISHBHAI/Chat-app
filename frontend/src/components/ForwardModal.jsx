@@ -141,7 +141,7 @@ const ForwardModal = ({ isOpen, onClose, selectedMessages, messages }) => {
                   />
 
                   <img
-                    src={friend.profilePicture || "default-avatar.png"}
+                    src={friend.avatar || "default-avatar.png"}
                     alt={friend.name}
                     className="w-10 h-10 rounded-full object-cover"
                   />

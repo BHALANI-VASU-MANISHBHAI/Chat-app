@@ -47,7 +47,7 @@ const Dashboard = () => {
   const deleteMessageMutation = useDeleteMessage();
   const editMessageMutation = useEditMessage();
   const deleteFriendMutation = useDeleteFriendMutation();
-  const options = ["delete", "edit", "forward", "reply", "copy"];
+  const options = ["delete", "copy"];
 
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -164,6 +164,12 @@ const Dashboard = () => {
   useEffect(() => {
     if (selectedFriend) {
       markAsReadMutation.mutate(selectedFriend._id);
+      //here clear options and messageidDropdown
+      setSelectedOption(null);
+      setMessageidDropdown(null);
+      setMessageid(null);
+      //oprion
+      setIsFriendMenuOpen(false);
     }
   }, [selectedFriend]);
 
@@ -257,13 +263,13 @@ const Dashboard = () => {
       <div className="w-80 bg-white border-r border-gray-300 flex flex-col">
         <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-800">Chats</h2>
-          <img
+          {/* <img
             src={assets.add_icon}
             alt="Add Friend"
             className="w-6 h-6 inline-block ml-2 cursor-pointer hover:opacity-70 transition-opacity"
             onClick={() => setShowAddFriendModal(true)}
             title="Add new friend"
-          />
+          /> */}
           <div className="relative">
             {/* Button to toggle menu */}
             <button
@@ -288,11 +294,11 @@ const Dashboard = () => {
                 <button
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                   onClick={() => {
-                    navigate("/create-group");
                     setIsAddOptionOpen(false);
+                    navigate("/profile");
                   }}
                 >
-                  Create Group
+                  Profile
                 </button>
               </div>
             )}
@@ -325,7 +331,7 @@ const Dashboard = () => {
               >
                 <div className="relative">
                   <img
-                    src={friend.profilePicture || "default-avatar.png"}
+                    src={friend.avatar || "default-avatar.png"}
                     alt={friend.name}
                     className={`w-12 h-12 rounded-full object-cover transition-all duration-200 ${
                       selectedFriend?._id === friend._id
@@ -359,22 +365,31 @@ const Dashboard = () => {
                         : "text-gray-500"
                     }`}
                   >
-                    Hey! How are you?
+                    {friend.status || "Hey there! I am using ChatApp"}
                   </p>
                 </div>
 
                 {/* Unread message badge - placeholder */}
                 <div className="flex flex-col items-end ml-2">
-                  <span className="text-xs text-gray-400">2:30 PM</span>
-                  <div
+                  <span className="text-xs text-gray-400">
+                    {
+                      //am pm time format for last seen
+                      new Date(friend.lastSeen).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      })
+                    }
+                  </span>
+                  {/* <div
                     className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${
                       selectedFriend?._id === friend._id
                         ? "bg-green-600 text-white"
                         : "bg-green-500 text-white"
                     }`}
                   >
-                    2
-                  </div>
+                    
+                  </div> */}
                 </div>
               </div>
             ))
@@ -448,7 +463,7 @@ const Dashboard = () => {
                 <>
                   <img
                     src={
-                      selectedFriend.profilePicture ||
+                      selectedFriend.avatar ||
                       "https://static.vecteezy.com/system/resources/previews/005/544/718/non_2x/profile-icon-design-free-vector.jpg"
                     }
                     alt={selectedFriend.name}

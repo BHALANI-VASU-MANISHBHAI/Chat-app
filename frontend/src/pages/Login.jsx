@@ -127,12 +127,7 @@ const Login = () => {
 
             {/* Links */}
             <div className="flex justify-between items-center text-sm">
-              <Link
-                className="text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200"
-                to="/forgot-password"
-              >
-                Forgot Password?
-              </Link>
+              
               <button
                 type="button"
                 className="text-blue-600 hover:text-blue-800 hover:underline transition-colors duration-200"

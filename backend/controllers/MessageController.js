@@ -1,5 +1,6 @@
 import messageModel from "../models/messageModel.js";
 import { redisClient } from "../config/redisClient.js";
+import userModel from "../models/userModel.js";
 
 const getMessages = async (req, res) => {
   const { friendId } = req.params;
@@ -75,6 +76,10 @@ const markMessagesAsRead = async (req, res) => {
       { sender: friendId, receiver: userId, isRead: false },
       { $set: { isRead: true } }
     );
+    //also chnage lastseen of that friend
+    await userModel.findByIdAndUpdate(userId, {
+      lastSeen: new Date(),
+    });
 
     // Get friend's socket ID from Redis
     const friendSocketId = await redisClient.get(`user:${friendId}`);

@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import axios from "axios";
 import { useFriends } from "../hooks/useFriends.js";
 import socket from "../services/socket.js";
+import { data } from "react-router-dom";
 
 export const UserContext = createContext();
 
@@ -16,7 +17,7 @@ const UserContextProvider = ({ children }) => {
   // ✅ Now use it in state
   const [friendData, setFriendData] = useState(friendsFromQuery);
 
-  const { backendUrl, token } = useContext(GlobalContext);
+  const { backendUrl, token ,navigate} = useContext(GlobalContext);
 
   // Fetch user data
   const getUserData = async () => {
@@ -41,13 +42,21 @@ const UserContextProvider = ({ children }) => {
 
   // Get user data on token change
   useEffect(() => {
-    if (token) getUserData();
+    if (token) {
+      getUserData();
+      navigate("/dashboard");
+    } else {
+      setUserData(null);
+      setFriendData([]);
+      navigate("/login");
+    }
   }, [token, backendUrl]);
 
   // Join socket room when user loaded
   useEffect(() => {
     if (userData) {
       socket.emit("joinRoom", userData._id);
+      console.log("Joined room for user:", userData._id);
     }
   }, [userData]);
 
@@ -59,6 +68,20 @@ const UserContextProvider = ({ children }) => {
     }
   }, [error]);
 
+  useEffect(() => {
+    socket.on("friendDeleted", (data) => {
+      const { friendId } = data;
+      console.log("Friend deleted:", friendId);
+      setFriendData((prevFriends) =>
+        prevFriends.filter((friend) => friend._id !== friendId)
+      );
+      toast.success("Friend removed successfully");
+    });
+
+    return () => {
+      socket.off("friendDeleted");
+    };
+  }, []);
   const value = {
     userData,
     setUserData,
@@ -66,6 +89,8 @@ const UserContextProvider = ({ children }) => {
     setFriendData,
     isLoadingFriends: isLoading,
   };
+
+
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 };

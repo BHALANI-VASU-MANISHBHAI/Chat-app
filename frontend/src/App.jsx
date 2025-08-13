@@ -1,10 +1,10 @@
 import { Route, Routes } from "react-router-dom"; // ✅ Added Route import
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup.jsx";
-import ShowFriend from "./pages/ShowFriend.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import Login from "./pages/Login";
+import Profile from "./pages/Profile.jsx"; // ✅ Importing Profile component
+import Signup from "./pages/Signup.jsx";
 
 const App = () => {
   return (
@@ -12,9 +12,9 @@ const App = () => {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/show-friend" element={<ShowFriend />} />
+        {/* ✅ Added Dashboard route */}
         <Route path="/dashboard" element={<Dashboard />} />
-        
+        <Route path="/profile" element={<Profile />} /> {/* ✅ Added Profile route */}
       </Routes>
 
       <ToastContainer

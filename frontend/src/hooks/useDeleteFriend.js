@@ -6,7 +6,6 @@ import { GlobalContext } from "../contexts/GlobalContext";
 
 const useDeleteFriendMutation = () => {
   const { backendUrl, token } = useContext(GlobalContext);
-  console.log("Using delete friend mutation with token:", token);
 
   return useMutation({
     mutationFn: async (friendId) => {

@@ -12,6 +12,7 @@ const Signup = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    status: "Hey there! I am using ChatApp", // Default status message
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
@@ -159,6 +160,21 @@ const Signup = () => {
                   )}
                 </button>
               </div>
+            </div>
+
+            {/* Status Message Field */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 block">
+                Status Message (Optional)
+              </label>
+              <textarea
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                placeholder="Tell others about yourself..."
+                rows="2"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white resize-none"
+              />
             </div>
 
             {/* Create Account Button */}
